@@ -27,20 +27,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('Generating video with Kling API:', { 
+    console.log('Generating video with Kling AI (NEW SYSTEM):', { 
       imageUrl: imageUrl.substring(0, 50) + '...', 
       prompt: prompt.substring(0, 100),
       duration,
       aspectRatio,
-      motion
+      motion,
+      model,
+      endpoint: 'api-singapore.klingai.com'
     });
 
-    // Kling API video generation request
-    const klingResponse = await fetch('https://api.klingai.com/v1/video/generations', {
+    const requestStart = Date.now();
+
+    // NEW: Kling API video generation request using updated endpoint
+    const klingResponse = await fetch('https://api-singapore.klingai.com/v1/video/generations', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${klingApiKey}`,
         'Content-Type': 'application/json',
+        'User-Agent': 'fal-image-editor/1.0.0'
       },
       body: JSON.stringify({
         model: model,
@@ -56,32 +61,74 @@ export async function POST(request: NextRequest) {
       }),
     });
 
+    const requestDuration = Date.now() - requestStart;
+
     if (!klingResponse.ok) {
       const errorData = await klingResponse.json().catch(() => ({}));
-      console.error('Kling API Error:', {
+      
+      // Enhanced error logging for new system
+      console.error('Kling API Error (NEW SYSTEM):', {
         status: klingResponse.status,
         statusText: klingResponse.statusText,
-        error: errorData
+        error: errorData,
+        endpoint: 'api-singapore.klingai.com',
+        requestDuration,
+        timestamp: new Date().toISOString()
       });
+
+      // Enhanced error response with specific error codes
+      let errorMessage = 'Video generation failed';
+      let errorCode = 'GENERATION_FAILED';
+
+      switch (klingResponse.status) {
+        case 400:
+          errorMessage = 'Invalid request parameters';
+          errorCode = 'INVALID_PARAMETERS';
+          break;
+        case 401:
+          errorMessage = 'Invalid API key or authentication failed';
+          errorCode = 'AUTH_FAILED';
+          break;
+        case 429:
+          errorMessage = 'Rate limit exceeded. Please try again later';
+          errorCode = 'RATE_LIMIT_EXCEEDED';
+          break;
+        case 500:
+          errorMessage = 'Kling AI service error';
+          errorCode = 'SERVICE_ERROR';
+          break;
+      }
 
       return NextResponse.json(
         { 
-          error: 'Video generation failed',
+          error: errorMessage,
+          errorCode,
           details: errorData.message || errorData.error || 'Unknown error',
-          status: klingResponse.status
+          status: klingResponse.status,
+          timestamp: new Date().toISOString()
         },
-        { status: 500 }
+        { status: klingResponse.status >= 500 ? 500 : 400 }
       );
     }
 
     const result = await klingResponse.json();
     
-    // Kling API returns a task ID for async processing
+    // Enhanced logging for successful requests with usage tracking
+    console.log('Kling API Success (NEW SYSTEM):', {
+      taskId: result.id,
+      model,
+      requestDuration,
+      estimatedCost: duration === 5 ? '$0.12' : '$0.24',
+      timestamp: new Date().toISOString(),
+      endpoint: 'api-singapore.klingai.com'
+    });
+    
+    // NEW SYSTEM: Enhanced response with real-time data
     return NextResponse.json({
       success: true,
       taskId: result.id,
       status: result.status || 'processing',
-      estimatedTime: result.estimated_time || duration * 10, // Rough estimate
+      estimatedTime: result.estimated_time || duration * 10,
       model: model,
       parameters: {
         prompt,
@@ -89,15 +136,36 @@ export async function POST(request: NextRequest) {
         aspectRatio,
         motion,
         creativityLevel
+      },
+      // NEW: Real-time usage data
+      usage: {
+        requestDuration,
+        estimatedCost: duration === 5 ? '$0.12' : '$0.24',
+        timestamp: new Date().toISOString(),
+        apiVersion: 'new-system'
+      },
+      // NEW: System metadata
+      system: {
+        endpoint: 'api-singapore.klingai.com',
+        realTimeUpdates: true,
+        instantDataDisplay: true
       }
     });
 
   } catch (error) {
-    console.error('Video generation error:', error);
+    console.error('Video generation error (NEW SYSTEM):', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+      endpoint: 'api-singapore.klingai.com'
+    });
+    
     return NextResponse.json(
       { 
         error: 'Failed to generate video',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        errorCode: 'SYSTEM_ERROR',
+        details: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
     );
