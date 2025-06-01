@@ -60,12 +60,15 @@ export interface VideoGenerationResponse {
     estimatedCost: string;
     timestamp: string;
     apiVersion: 'new-system';
+    authMethod: 'JWT';
   };
   // NEW SYSTEM: System metadata
   system: {
     endpoint: 'api-singapore.klingai.com';
     realTimeUpdates: boolean;
     instantDataDisplay: boolean;
+    authMethod: 'JWT';
+    jwtTokenUsed: boolean;
   };
   error?: string;
   errorCode?: string;
@@ -86,6 +89,7 @@ export interface VideoStatusResponse {
     statusCheckCount: number;
     timestamp: string;
     apiVersion: 'new-system';
+    authMethod: 'JWT';
   };
   // NEW SYSTEM: Enhanced metadata
   metadata: {
@@ -94,6 +98,8 @@ export interface VideoStatusResponse {
     realTimeUpdates: boolean;
     instantDataDisplay: boolean;
     lastChecked: string;
+    authMethod: 'JWT';
+    jwtTokenUsed: boolean;
     completedAt?: string;
     processingTime?: number;
     fileSize?: number;

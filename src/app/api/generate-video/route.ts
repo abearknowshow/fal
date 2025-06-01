@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { KlingJWTManager } from '@/lib/kling-jwt';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,31 +20,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const klingApiKey = process.env.KLING_API_KEY;
-    if (!klingApiKey) {
+    // NEW SYSTEM: JWT Authentication with Access Key and Secret Key
+    const klingAccessKey = process.env.KLING_ACCESS_KEY;
+    const klingSecretKey = process.env.KLING_SECRET_KEY;
+    
+    if (!klingAccessKey || !klingSecretKey) {
       return NextResponse.json(
-        { error: 'Kling API key not configured' },
+        { 
+          error: 'Kling AI credentials not configured',
+          details: 'Both KLING_ACCESS_KEY and KLING_SECRET_KEY are required for JWT authentication'
+        },
         { status: 500 }
       );
     }
 
-    console.log('Generating video with Kling AI (NEW SYSTEM):', { 
+    // Generate JWT token for authentication
+    const jwtManager = new KlingJWTManager(klingAccessKey, klingSecretKey);
+    const authToken = jwtManager.getValidToken();
+
+    console.log('Generating video with Kling AI (NEW SYSTEM + JWT):', { 
       imageUrl: imageUrl.substring(0, 50) + '...', 
       prompt: prompt.substring(0, 100),
       duration,
       aspectRatio,
       motion,
       model,
-      endpoint: 'api-singapore.klingai.com'
+      endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT'
     });
 
     const requestStart = Date.now();
 
-    // NEW: Kling API video generation request using updated endpoint
+    // NEW: Kling API video generation request using updated endpoint + JWT
     const klingResponse = await fetch('https://api-singapore.klingai.com/v1/video/generations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${klingApiKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json',
         'User-Agent': 'fal-image-editor/1.0.0'
       },
@@ -67,11 +79,12 @@ export async function POST(request: NextRequest) {
       const errorData = await klingResponse.json().catch(() => ({}));
       
       // Enhanced error logging for new system
-      console.error('Kling API Error (NEW SYSTEM):', {
+      console.error('Kling API Error (NEW SYSTEM + JWT):', {
         status: klingResponse.status,
         statusText: klingResponse.statusText,
         error: errorData,
         endpoint: 'api-singapore.klingai.com',
+        authMethod: 'JWT',
         requestDuration,
         timestamp: new Date().toISOString()
       });
@@ -86,8 +99,12 @@ export async function POST(request: NextRequest) {
           errorCode = 'INVALID_PARAMETERS';
           break;
         case 401:
-          errorMessage = 'Invalid API key or authentication failed';
-          errorCode = 'AUTH_FAILED';
+          errorMessage = 'JWT authentication failed - check Access Key and Secret Key';
+          errorCode = 'JWT_AUTH_FAILED';
+          break;
+        case 403:
+          errorMessage = 'JWT token invalid or expired';
+          errorCode = 'JWT_TOKEN_INVALID';
           break;
         case 429:
           errorMessage = 'Rate limit exceeded. Please try again later';
@@ -105,7 +122,8 @@ export async function POST(request: NextRequest) {
           errorCode,
           details: errorData.message || errorData.error || 'Unknown error',
           status: klingResponse.status,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          authMethod: 'JWT'
         },
         { status: klingResponse.status >= 500 ? 500 : 400 }
       );
@@ -114,13 +132,14 @@ export async function POST(request: NextRequest) {
     const result = await klingResponse.json();
     
     // Enhanced logging for successful requests with usage tracking
-    console.log('Kling API Success (NEW SYSTEM):', {
+    console.log('Kling API Success (NEW SYSTEM + JWT):', {
       taskId: result.id,
       model,
       requestDuration,
       estimatedCost: duration === 5 ? '$0.12' : '$0.24',
       timestamp: new Date().toISOString(),
-      endpoint: 'api-singapore.klingai.com'
+      endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT'
     });
     
     // NEW SYSTEM: Enhanced response with real-time data
@@ -142,22 +161,26 @@ export async function POST(request: NextRequest) {
         requestDuration,
         estimatedCost: duration === 5 ? '$0.12' : '$0.24',
         timestamp: new Date().toISOString(),
-        apiVersion: 'new-system'
+        apiVersion: 'new-system',
+        authMethod: 'JWT'
       },
       // NEW: System metadata
       system: {
         endpoint: 'api-singapore.klingai.com',
         realTimeUpdates: true,
-        instantDataDisplay: true
+        instantDataDisplay: true,
+        authMethod: 'JWT',
+        jwtTokenUsed: true
       }
     });
 
   } catch (error) {
-    console.error('Video generation error (NEW SYSTEM):', {
+    console.error('Video generation error (NEW SYSTEM + JWT):', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString(),
-      endpoint: 'api-singapore.klingai.com'
+      endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT'
     });
     
     return NextResponse.json(
@@ -165,7 +188,8 @@ export async function POST(request: NextRequest) {
         error: 'Failed to generate video',
         errorCode: 'SYSTEM_ERROR',
         details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        authMethod: 'JWT'
       },
       { status: 500 }
     );

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { KlingJWTManager } from '@/lib/kling-jwt';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,27 +13,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const klingApiKey = process.env.KLING_API_KEY;
-    if (!klingApiKey) {
+    // NEW SYSTEM: JWT Authentication with Access Key and Secret Key
+    const klingAccessKey = process.env.KLING_ACCESS_KEY;
+    const klingSecretKey = process.env.KLING_SECRET_KEY;
+    
+    if (!klingAccessKey || !klingSecretKey) {
       return NextResponse.json(
-        { error: 'Kling API key not configured' },
+        { 
+          error: 'Kling AI credentials not configured',
+          details: 'Both KLING_ACCESS_KEY and KLING_SECRET_KEY are required for JWT authentication'
+        },
         { status: 500 }
       );
     }
 
-    console.log('Checking video status (NEW SYSTEM):', { 
+    // Generate JWT token for authentication
+    const jwtManager = new KlingJWTManager(klingAccessKey, klingSecretKey);
+    const authToken = jwtManager.getValidToken();
+
+    console.log('Checking video status (NEW SYSTEM + JWT):', { 
       taskId,
       endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT',
       timestamp: new Date().toISOString()
     });
 
     const requestStart = Date.now();
 
-    // NEW: Check video generation status using updated endpoint
+    // NEW: Check video generation status using updated endpoint + JWT
     const klingResponse = await fetch(`https://api-singapore.klingai.com/v1/video/generations/${taskId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${klingApiKey}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json',
         'User-Agent': 'fal-image-editor/1.0.0'
       },
@@ -44,12 +56,13 @@ export async function GET(request: NextRequest) {
       const errorData = await klingResponse.json().catch(() => ({}));
       
       // Enhanced error logging for new system
-      console.error('Kling API Status Error (NEW SYSTEM):', {
+      console.error('Kling API Status Error (NEW SYSTEM + JWT):', {
         status: klingResponse.status,
         statusText: klingResponse.statusText,
         error: errorData,
         taskId,
         endpoint: 'api-singapore.klingai.com',
+        authMethod: 'JWT',
         requestDuration,
         timestamp: new Date().toISOString()
       });
@@ -64,8 +77,12 @@ export async function GET(request: NextRequest) {
           errorCode = 'INVALID_TASK_ID';
           break;
         case 401:
-          errorMessage = 'Invalid API key or authentication failed';
-          errorCode = 'AUTH_FAILED';
+          errorMessage = 'JWT authentication failed - check Access Key and Secret Key';
+          errorCode = 'JWT_AUTH_FAILED';
+          break;
+        case 403:
+          errorMessage = 'JWT token invalid or expired';
+          errorCode = 'JWT_TOKEN_INVALID';
           break;
         case 404:
           errorMessage = 'Task not found';
@@ -88,7 +105,8 @@ export async function GET(request: NextRequest) {
           details: errorData.message || errorData.error || 'Unknown error',
           status: klingResponse.status,
           taskId,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          authMethod: 'JWT'
         },
         { status: klingResponse.status >= 500 ? 500 : 400 }
       );
@@ -109,17 +127,18 @@ export async function GET(request: NextRequest) {
     const mappedStatus = statusMap[result.status as keyof typeof statusMap] || 'processing';
     
     // Enhanced logging for status checks with real-time data
-    console.log('Kling API Status Success (NEW SYSTEM):', {
+    console.log('Kling API Status Success (NEW SYSTEM + JWT):', {
       taskId,
       status: mappedStatus,
       originalStatus: result.status,
       progress: result.progress,
       requestDuration,
       timestamp: new Date().toISOString(),
-      endpoint: 'api-singapore.klingai.com'
+      endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT'
     });
     
-    const response: any = {
+    const response = {
       taskId,
       status: mappedStatus,
       progress: result.progress || (mappedStatus === 'completed' ? 100 : undefined),
@@ -133,7 +152,8 @@ export async function GET(request: NextRequest) {
         requestDuration,
         statusCheckCount: 1, // Could be tracked in a more sophisticated way
         timestamp: new Date().toISOString(),
-        apiVersion: 'new-system'
+        apiVersion: 'new-system',
+        authMethod: 'JWT'
       },
       // NEW: Enhanced metadata
       metadata: {
@@ -141,7 +161,9 @@ export async function GET(request: NextRequest) {
         endpoint: 'api-singapore.klingai.com',
         realTimeUpdates: true,
         instantDataDisplay: true,
-        lastChecked: new Date().toISOString()
+        lastChecked: new Date().toISOString(),
+        authMethod: 'JWT',
+        jwtTokenUsed: true
       }
     };
 
@@ -152,27 +174,23 @@ export async function GET(request: NextRequest) {
       response.duration = result.output.duration;
       
       // NEW: Additional completion metadata
-      response.metadata = {
-        originalStatus: result.status,
-        endpoint: 'api-singapore.klingai.com',
-        realTimeUpdates: true,
-        instantDataDisplay: true,
-        lastChecked: new Date().toISOString(),
+      Object.assign(response.metadata, {
         completedAt: new Date().toISOString(),
         processingTime: result.processing_time,
         fileSize: result.output.file_size,
         resolution: result.output.resolution
-      };
+      });
     }
 
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error('Video status check error (NEW SYSTEM):', {
+    console.error('Video status check error (NEW SYSTEM + JWT):', {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString(),
-      endpoint: 'api-singapore.klingai.com'
+      endpoint: 'api-singapore.klingai.com',
+      authMethod: 'JWT'
     });
     
     return NextResponse.json(
@@ -180,7 +198,8 @@ export async function GET(request: NextRequest) {
         error: 'Failed to check video status',
         errorCode: 'SYSTEM_ERROR',
         details: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        authMethod: 'JWT'
       },
       { status: 500 }
     );
