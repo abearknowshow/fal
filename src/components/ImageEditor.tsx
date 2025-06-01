@@ -12,7 +12,8 @@ import {
   ZoomOut,
   Maximize2,
   Layers,
-  Play
+  Play,
+  Scissors
 } from "lucide-react";
 import { GalleryImage } from "@/types/image-generation";
 import { 
@@ -56,6 +57,9 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
   const [isDragActive, setIsDragActive] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   
+  // Auto-remove background toggle
+  const [autoRemoveBackground, setAutoRemoveBackground] = useState(true);
+  
   // Panel state
   const [rightPanelMode, setRightPanelMode] = useState<'layers' | 'assets'>('layers');
   
@@ -76,17 +80,20 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
   
   // Calculate initial zoom to fit image in viewport
   const calculateFitZoom = useCallback(() => {
-    if (!canvasContainerRef.current) return 1;
+    if (!canvasContainerRef.current) {
+      return 0.3; // Default reasonable zoom for large images
+    }
     
     const container = canvasContainerRef.current;
-    const containerWidth = container.clientWidth - 32; // Small padding for UI elements
-    const containerHeight = container.clientHeight - 32; // Small padding for UI elements
+    const containerWidth = Math.max(container.clientWidth - 64, 200); // Ensure minimum width
+    const containerHeight = Math.max(container.clientHeight - 64, 200); // Ensure minimum height
     
     const scaleX = containerWidth / image.width;
     const scaleY = containerHeight / image.height;
     
     // Use the smaller scale to ensure the entire image fits
-    return Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
+    const scale = Math.min(scaleX, scaleY, 1);
+    return Math.max(scale, 0.1); // Ensure zoom is at least 0.1 (10%)
   }, [image.width, image.height]);
   
   const [editorState, setEditorState] = useState<EditorState>(() => {
@@ -94,6 +101,7 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
       id: 'layer-0',
       name: 'Background',
       imageUrl: image.localUrl || image.url,
+      originalUrl: image.url, // Preserve original fal.media URL for API calls
       x: 0,
       y: 0,
       width: image.width,
@@ -428,6 +436,133 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
     }
   };
 
+  const handleSmartBackgroundRemoval = async (layerId: string) => {
+    const layer = editorState.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    setEditorState(prev => ({ ...prev, isProcessing: true }));
+    
+    try {
+      console.log('Starting smart background removal for layer:', layerId);
+      
+      const response = await fetch('/api/remove-background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: layer.imageUrl })
+      });
+
+      if (!response.ok) throw new Error('Background removal failed');
+      
+      const result = await response.json();
+      
+      // Load the background-removed image and crop to subject bounds
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = result.imageUrl;
+      });
+      
+      // Create canvas to analyze and crop the subject
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const bounds = getSubjectBounds(imageData);
+      
+      if (bounds) {
+        // Crop to subject bounds
+        const croppedCanvas = document.createElement('canvas');
+        const croppedCtx = croppedCanvas.getContext('2d');
+        if (!croppedCtx) return;
+        
+        croppedCanvas.width = bounds.width;
+        croppedCanvas.height = bounds.height;
+        
+        croppedCtx.drawImage(
+          img,
+          bounds.x, bounds.y, bounds.width, bounds.height,
+          0, 0, bounds.width, bounds.height
+        );
+        
+        const croppedImageUrl = croppedCanvas.toDataURL('image/png');
+        
+        // Update layer with cropped image and adjusted position
+        const updatedLayers = editorState.layers.map(l => 
+          l.id === layerId 
+            ? { 
+                ...l, 
+                imageUrl: croppedImageUrl,
+                x: layer.x + bounds.x * (layer.width / img.width), // Adjust position
+                y: layer.y + bounds.y * (layer.height / img.height),
+                width: bounds.width * (layer.width / img.width), // Adjust size
+                height: bounds.height * (layer.height / img.height),
+                hasTransparency: true
+              }
+            : l
+        );
+
+        saveToHistory({ layers: updatedLayers });
+        console.log('Smart background removal and cropping completed:', {
+          original: `${img.width}x${img.height}`,
+          cropped: `${bounds.width}x${bounds.height}`,
+          bounds
+        });
+      } else {
+        // Fallback: no cropping if no subject found
+        const updatedLayers = editorState.layers.map(l => 
+          l.id === layerId 
+            ? { 
+                ...l, 
+                imageUrl: result.imageUrl,
+                hasTransparency: true
+              }
+            : l
+        );
+        saveToHistory({ layers: updatedLayers });
+      }
+      
+    } catch (error) {
+      console.error('Smart background removal failed:', error);
+    } finally {
+      setEditorState(prev => ({ ...prev, isProcessing: false }));
+    }
+  };
+
+  // Helper function to find the bounds of non-transparent pixels
+  const getSubjectBounds = (imageData: ImageData) => {
+    const { width, height, data } = imageData;
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const alpha = data[(y * width + x) * 4 + 3];
+        if (alpha > 0) { // Non-transparent pixel
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+    
+    if (maxX === -1) return null; // No subject found
+    
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1
+    };
+  };
+
   const handleCanvasResize = async (options: CanvasResizeOptions) => {
     const { width, height, maintainCenter = true, scaleContent = false } = options;
     
@@ -542,6 +677,14 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
     });
   };
 
+  const handleLayerReorder = (dragIndex: number, hoverIndex: number) => {
+    const updatedLayers = [...editorState.layers];
+    const [draggedLayer] = updatedLayers.splice(dragIndex, 1);
+    updatedLayers.splice(hoverIndex, 0, draggedLayer);
+    
+    saveToHistory({ layers: updatedLayers });
+  };
+
   const handleImportImage = () => {
     fileInputRef.current?.click();
   };
@@ -578,14 +721,35 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
           img.src = dataUrl;
         });
 
-        // Calculate appropriate size and position for the new layer
-        const maxSize = Math.min(editorState.canvasWidth, editorState.canvasHeight) * 0.5;
-        const scale = Math.min(maxSize / width, maxSize / height, 1);
+        // Smart scaling: Match original background dimensions for consistency
+        const backgroundLayer = editorState.layers.find(l => l.isBackground);
+        let scale = 1;
+        
+        if (backgroundLayer) {
+          // Calculate original background dimensions (before any scaling/extension)
+          const originalBackgroundWidth = backgroundLayer.width / backgroundLayer.scaleX;
+          const originalBackgroundHeight = backgroundLayer.height / backgroundLayer.scaleY;
+          
+          // Scale to match original background size, not current canvas
+          const scaleX = originalBackgroundWidth / width;
+          const scaleY = originalBackgroundHeight / height;
+          scale = Math.min(scaleX, scaleY, 1); // Don't upscale beyond original size
+          
+          console.log('Smart import scaling:', {
+            originalBackground: `${originalBackgroundWidth}x${originalBackgroundHeight}`,
+            importImage: `${width}x${height}`,
+            calculatedScale: scale
+          });
+        } else {
+          // Fallback to canvas-based scaling if no background layer
+          const maxSize = Math.min(editorState.canvasWidth, editorState.canvasHeight) * 0.5;
+          scale = Math.min(maxSize / width, maxSize / height, 1);
+        }
         
         const layerWidth = width * scale;
         const layerHeight = height * scale;
         
-        // Center the layer on the canvas
+        // Center the layer on the (possibly extended) canvas
         const x = (editorState.canvasWidth - layerWidth) / 2;
         const y = (editorState.canvasHeight - layerHeight) / 2;
 
@@ -593,6 +757,7 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
           id: `layer-${Date.now()}-${Math.random()}`,
           name: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
           imageUrl: dataUrl,
+          // Note: Imported files don't have originalUrl - will be handled by API upload
           x: Math.max(0, x),
           y: Math.max(0, y),
           width: layerWidth,
@@ -611,6 +776,15 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
           layers: updatedLayers,
           activeLayerId: newLayer.id
         });
+
+        // Auto-remove background if enabled
+        if (autoRemoveBackground) {
+          console.log('Auto-removing background for imported layer:', newLayer.id);
+          // Small delay to ensure the layer is properly added
+          setTimeout(() => {
+            handleSmartBackgroundRemoval(newLayer.id);
+          }, 100);
+        }
       }
     } catch (error) {
       console.error('Failed to import files:', error);
@@ -643,7 +817,7 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
   };
 
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!canvasRef.current) return;
     
     setEditorState(prev => ({ ...prev, isProcessing: true }));
@@ -675,9 +849,17 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
 
         ctx.save();
         ctx.globalAlpha = layer.opacity;
-        ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+        
+        // Calculate actual layer dimensions with scaling
+        const scaledWidth = layer.width * layer.scaleX;
+        const scaledHeight = layer.height * layer.scaleY;
+        
+        // Translate to layer center for rotation/scaling
+        ctx.translate(layer.x + scaledWidth / 2, layer.y + scaledHeight / 2);
         ctx.rotate(layer.rotation * Math.PI / 180);
         ctx.scale(layer.scaleX, layer.scaleY);
+        
+        // Draw image from its center
         ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         ctx.restore();
       }
@@ -693,7 +875,7 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
     } finally {
       setEditorState(prev => ({ ...prev, isProcessing: false }));
     }
-  };
+  }, [editorState, onSave, image]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveToGallery = async (imageDataUrl: string) => {
     try {
@@ -823,9 +1005,17 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
 
         ctx.save();
         ctx.globalAlpha = layer.opacity;
-        ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+        
+        // Calculate actual layer dimensions with scaling
+        const scaledWidth = layer.width * layer.scaleX;
+        const scaledHeight = layer.height * layer.scaleY;
+        
+        // Translate to layer center for rotation/scaling
+        ctx.translate(layer.x + scaledWidth / 2, layer.y + scaledHeight / 2);
         ctx.rotate(layer.rotation * Math.PI / 180);
         ctx.scale(layer.scaleX, layer.scaleY);
+        
+        // Draw image from its center
         ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         ctx.restore();
       }
@@ -881,9 +1071,17 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
 
         ctx.save();
         ctx.globalAlpha = layer.opacity;
-        ctx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+        
+        // Calculate actual layer dimensions with scaling
+        const scaledWidth = layer.width * layer.scaleX;
+        const scaledHeight = layer.height * layer.scaleY;
+        
+        // Translate to layer center for rotation/scaling
+        ctx.translate(layer.x + scaledWidth / 2, layer.y + scaledHeight / 2);
         ctx.rotate(layer.rotation * Math.PI / 180);
         ctx.scale(layer.scaleX, layer.scaleY);
+        
+        // Draw image from its center
         ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         ctx.restore();
       }
@@ -945,7 +1143,7 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [undo, redo, onClose]);
+  }, [undo, redo, onClose, handleSave]);
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
@@ -985,9 +1183,18 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
               <ZoomIn className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleImportImage}>
+          <Button 
+            variant={autoRemoveBackground ? "default" : "outline"}
+            size="sm"
+            onClick={() => setAutoRemoveBackground(!autoRemoveBackground)}
+            title="Automatically remove background from imported images"
+          >
+            <Scissors className="h-4 w-4 mr-1" />
+            Auto-BG: {autoRemoveBackground ? "ON" : "OFF"}
+          </Button>
+          <Button variant="default" size="sm" onClick={handleImportImage}>
             <Upload className="h-4 w-4 mr-2" />
-            Import
+            Add Subject
           </Button>
           <Button 
             variant="outline" 
@@ -1037,12 +1244,13 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
         />
 
         {/* Main Canvas Area with Drag & Drop */}
-        <DropZone
-          onFilesDrop={handleFilesDrop}
-          onDragStateChange={setIsDragActive}
-          isActive={!editorState.isProcessing && !isImporting}
-        >
-          <div ref={canvasContainerRef} className="flex-1 bg-muted relative overflow-hidden">
+        <div className="flex-1 relative">
+          <DropZone
+            onFilesDrop={handleFilesDrop}
+            onDragStateChange={setIsDragActive}
+            isActive={!editorState.isProcessing && !isImporting}
+          >
+            <div ref={canvasContainerRef} className="absolute inset-0 bg-muted overflow-hidden">
             {/* Import overlay */}
             {(isImporting || isDragActive) && (
               <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
@@ -1132,8 +1340,9 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
               }}
             />
           )}
-          </div>
-        </DropZone>
+            </div>
+          </DropZone>
+        </div>
 
         {/* Canvas Tool Modal */}
         {editorState.currentTool === EDITOR_TOOLS.CANVAS && (
@@ -1175,9 +1384,12 @@ export default function ImageEditor({ image, onClose, onSave }: ImageEditorProps
             <LayerPanel
               layers={editorState.layers}
               activeLayerId={editorState.activeLayerId}
+              canvasWidth={editorState.canvasWidth}
+              canvasHeight={editorState.canvasHeight}
               onLayerSelect={(layerId: string) => setEditorState(prev => ({ ...prev, activeLayerId: layerId }))}
               onLayerUpdate={handleLayerUpdate}
               onLayerDelete={handleLayerDelete}
+              onLayerReorder={handleLayerReorder}
               onAddLayer={() => handleImportImage()}
             />
           ) : (

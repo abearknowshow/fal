@@ -251,7 +251,7 @@ export function VideoGenerationForm({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{m.label}</span>
-                    {'recommended' in m && m.recommended && (
+                    {'recommended' in m && (m as { recommended?: boolean }).recommended && (
                       <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded">
                         Recommended
                       </span>

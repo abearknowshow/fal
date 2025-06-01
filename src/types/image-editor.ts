@@ -2,6 +2,7 @@ export interface EditorLayer {
   id: string;
   name: string;
   imageUrl: string;
+  originalUrl?: string; // Original fal.media URL for API calls
   x: number;
   y: number;
   width: number;

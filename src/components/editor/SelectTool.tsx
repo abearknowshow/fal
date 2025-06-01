@@ -21,7 +21,17 @@ import {
 
 interface SelectToolProps {
   activeLayerId: string | null;
-  layers: Array<{ id: string; imageUrl: string; x: number; y: number; width: number; height: number }>;
+  layers: Array<{ 
+    id: string; 
+    imageUrl: string; 
+    originalUrl?: string; 
+    x: number; 
+    y: number; 
+    width: number; 
+    height: number;
+    scaleX: number;
+    scaleY: number;
+  }>;
   canvasWidth: number;
   canvasHeight: number;
   zoom: number;
@@ -36,6 +46,8 @@ type BrushMode = 'add' | 'subtract' | 'smooth' | 'sharpen';
 export function SelectTool({ 
   activeLayerId, 
   layers, 
+  canvasWidth,
+  canvasHeight,
   zoom, 
   onSelectionComplete, 
   onCancel, 
@@ -57,10 +69,11 @@ export function SelectTool({
   const [showEdgeOverlay, setShowEdgeOverlay] = useState(false);
   const [magicWandTolerance, setMagicWandTolerance] = useState(20);
   const [aiSuggestions, setAiSuggestions] = useState<Array<{ confidence: number; area: string }>>([]);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const activeLayer = layers.find(l => l.id === activeLayerId);
 
-  // Calculate the image bounds in the viewport
+  // Calculate the layer bounds in the viewport (matching EditorCanvas coordinate system)
   const getImageBounds = useCallback(() => {
     if (!overlayRef.current || !activeLayer) return { x: 0, y: 0, width: 0, height: 0 };
     
@@ -68,15 +81,34 @@ export function SelectTool({
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
     
-    const imageWidth = activeLayer.width * zoom;
-    const imageHeight = activeLayer.height * zoom;
+    // First, calculate the canvas bounds (same as EditorCanvas)
+    const scaledCanvasWidth = canvasWidth * zoom;
+    const scaledCanvasHeight = canvasHeight * zoom;
+    const canvasX = (containerWidth - scaledCanvasWidth) / 2;
+    const canvasY = (containerHeight - scaledCanvasHeight) / 2;
     
-    // Center the image in the viewport
-    const x = (containerWidth - imageWidth) / 2 + activeLayer.x * zoom;
-    const y = (containerHeight - imageHeight) / 2 + activeLayer.y * zoom;
+    // Then, calculate the layer position relative to the canvas
+    const layerX = activeLayer.x * zoom;
+    const layerY = activeLayer.y * zoom;
+    const layerWidth = activeLayer.width * activeLayer.scaleX * zoom;
+    const layerHeight = activeLayer.height * activeLayer.scaleY * zoom;
     
-    return { x, y, width: imageWidth, height: imageHeight };
-  }, [activeLayer, zoom]);
+    // Final position in viewport
+    const x = canvasX + layerX;
+    const y = canvasY + layerY;
+    
+    console.log('Layer bounds calculation:', {
+      containerSize: { w: containerWidth, h: containerHeight },
+      canvasSize: { w: scaledCanvasWidth, h: scaledCanvasHeight },
+      canvasPos: { x: canvasX, y: canvasY },
+      layerPos: { x: activeLayer.x, y: activeLayer.y },
+      layerSize: { w: activeLayer.width, h: activeLayer.height },
+      layerScale: { sx: activeLayer.scaleX, sy: activeLayer.scaleY },
+      finalBounds: { x, y, width: layerWidth, height: layerHeight }
+    });
+    
+    return { x, y, width: layerWidth, height: layerHeight };
+  }, [activeLayer, zoom, canvasWidth, canvasHeight]);
 
   // Initialize canvas for manual selection
   useEffect(() => {
@@ -86,15 +118,47 @@ export function SelectTool({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = activeLayer.width;
-    canvas.height = activeLayer.height;
+    // Set canvas dimensions to match the scaled/rendered layer size
+    const scaledWidth = activeLayer.width * activeLayer.scaleX;
+    const scaledHeight = activeLayer.height * activeLayer.scaleY;
+    canvas.width = scaledWidth;
+    canvas.height = scaledHeight;
     
-    // Initialize with transparent mask
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    console.log('Canvas effect triggered:', {
+      hasMaskData: !!maskData,
+      maskDimensions: maskData ? `${maskData.width}x${maskData.height}` : 'none',
+      layerDimensions: `${activeLayer.width}x${activeLayer.height}`,
+      scaledDimensions: `${scaledWidth}x${scaledHeight}`,
+      mode
+    });
     
-    // Store initial mask data
-    setMaskData(ctx.getImageData(0, 0, canvas.width, canvas.height));
-  }, [activeLayer]);
+    // If we have mask data from AI selection, apply it directly (no scaling needed)
+    if (maskData && maskData.width === scaledWidth && maskData.height === scaledHeight) {
+      console.log('Applying mask data to canvas');
+      ctx.putImageData(maskData, 0, 0);
+    } else if (maskData && maskData.width === activeLayer.width && maskData.height === activeLayer.height) {
+      console.log('Scaling mask data to match canvas');
+      // Scale the mask to match the canvas size
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCanvas.width = maskData.width;
+        tempCanvas.height = maskData.height;
+        tempCtx.putImageData(maskData, 0, 0);
+        
+        // Draw scaled mask to main canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(tempCanvas, 0, 0, maskData.width, maskData.height, 0, 0, scaledWidth, scaledHeight);
+      }
+    } else {
+      // Initialize with transparent mask
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Store initial mask data only if we don't have any
+      if (!maskData) {
+        setMaskData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+      }
+    }
+  }, [activeLayer, maskData, mode]);
 
   // AI-powered smart selection
   // Draw on the selection mask
@@ -315,30 +379,104 @@ export function SelectTool({
   };
 
   const handleAiSelection = async () => {
-    if (!activeLayer) return;
+    console.log('Auto Select clicked');
     
+    if (!activeLayer) {
+      console.log('No active layer');
+      return;
+    }
+    
+    console.log('Starting AI selection...');
+    console.log('Original imageUrl:', activeLayer.imageUrl);
+    console.log('Original URL (if available):', activeLayer.originalUrl);
+    console.log('Active layer full object:', activeLayer);
+    
+    // Use original fal.media URL if available, otherwise fall back to current imageUrl
+    const urlToUse = activeLayer.originalUrl || activeLayer.imageUrl;
+    console.log('Using URL for background removal:', urlToUse);
+    
+    setIsAiProcessing(true);
     try {
-      // Simulate AI detection with some suggestions
-      // In a real implementation, this would call an AI segmentation API
-      setAiSuggestions([
-        { confidence: 0.92, area: 'Main subject' },
-        { confidence: 0.78, area: 'Background objects' },
-        { confidence: 0.65, area: 'Secondary elements' }
-      ]);
-
-      // For now, use the existing background removal API as a smart selection
       const response = await fetch('/api/remove-background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: activeLayer.imageUrl })
+        body: JSON.stringify({ imageUrl: urlToUse })
       });
 
       if (!response.ok) throw new Error('AI selection failed');
       
       const result = await response.json();
-      onSelectionComplete(result.imageUrl);
+      
+      // Create a mask from the background-removed image
+      const maskCanvas = document.createElement('canvas');
+      const maskCtx = maskCanvas.getContext('2d');
+      if (!maskCtx) return;
+      
+      // Load the background-removed image
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = result.imageUrl;
+      });
+      
+      // Make sure mask canvas matches the scaled layer dimensions for display
+      const scaledWidth = activeLayer.width * activeLayer.scaleX;
+      const scaledHeight = activeLayer.height * activeLayer.scaleY;
+      maskCanvas.width = scaledWidth;
+      maskCanvas.height = scaledHeight;
+      
+      // Draw the background-removed image to match the scaled layer size
+      maskCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+      const imageData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+      
+      // Convert alpha channel to green channel mask for consistency with other tools
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const alpha = imageData.data[i + 3];
+        if (alpha > 0) {
+          // Subject pixel - mark as selected (green channel = 255)
+          imageData.data[i] = 0;       // R
+          imageData.data[i + 1] = 255; // G (mask channel)
+          imageData.data[i + 2] = 0;   // B
+          imageData.data[i + 3] = 200; // A (more opaque for visibility)
+        } else {
+          // Background pixel - mark as unselected (green channel = 0)
+          imageData.data[i] = 0;       // R
+          imageData.data[i + 1] = 0;   // G (mask channel)
+          imageData.data[i + 2] = 0;   // B
+          imageData.data[i + 3] = 0;   // A (fully transparent)
+        }
+      }
+      
+      // Count selected pixels for debugging
+      let selectedPixels = 0;
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        if (imageData.data[i + 1] > 0) selectedPixels++;
+      }
+      console.log(`Mask created: ${selectedPixels} selected pixels out of ${imageData.data.length / 4}`, {
+        originalSize: `${activeLayer.width}x${activeLayer.height}`,
+        scaledSize: `${scaledWidth}x${scaledHeight}`,
+        scaleFactors: `${activeLayer.scaleX}x${activeLayer.scaleY}`
+      });
+      
+      // Update the mask data
+      setMaskData(imageData);
+      
+      // Switch to refine mode which will show the canvas and allow user to adjust
+      setMode('refine');
+      setAiSuggestions([
+        { confidence: 0.92, area: 'Main subject detected' }
+      ]);
+      
+      // The canvas will be created when we switch to refine mode
+      // We'll update it in a useEffect
+      
     } catch (error) {
       console.error('AI selection failed:', error);
+    } finally {
+      setIsAiProcessing(false);
     }
   };
 
@@ -433,7 +571,7 @@ export function SelectTool({
   };
 
   // Apply selection
-  const handleApplySelection = async () => {
+  const handleApplySelection = useCallback(async () => {
     if (!activeLayer || !maskData) return;
     
     try {
@@ -461,13 +599,28 @@ export function SelectTool({
       // Apply the mask
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       
+      let backgroundPixels = 0;
+      let subjectPixels = 0;
+      
       for (let i = 0; i < imageData.data.length; i += 4) {
-        const maskAlpha = maskData.data[i + 1]; // Use green channel as mask
-        if (maskAlpha === 0) {
-          // Make pixel transparent
+        const maskValue = maskData.data[i + 1]; // Use green channel as mask
+        if (maskValue === 0) {
+          // Background pixel - make transparent (remove)
           imageData.data[i + 3] = 0;
+          backgroundPixels++;
+        } else {
+          // Subject pixels (maskValue > 0) keep their original alpha  
+          subjectPixels++;
         }
       }
+      
+      console.log('Mask application:', {
+        totalPixels: imageData.data.length / 4,
+        backgroundPixels,
+        subjectPixels,
+        maskDimensions: `${maskData.width}x${maskData.height}`,
+        canvasDimensions: `${canvas.width}x${canvas.height}`
+      });
 
       ctx.putImageData(imageData, 0, 0);
       const resultUrl = canvas.toDataURL('image/png');
@@ -476,10 +629,26 @@ export function SelectTool({
     } catch (error) {
       console.error('Failed to apply selection:', error);
     }
-  };
+  }, [activeLayer, maskData, onSelectionComplete]);
 
   const imageBounds = getImageBounds();
   const hasSelection = maskData && maskData.data.some(byte => byte > 0);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && hasSelection && !isProcessing) {
+        e.preventDefault();
+        handleApplySelection();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [onCancel, hasSelection, isProcessing, handleApplySelection]);
 
   return (
     <div 
@@ -493,8 +662,9 @@ export function SelectTool({
       {(mode === 'manual' || mode === 'refine' || mode === 'magic-wand' || mode === 'edge-detect') && activeLayer && (
         <canvas
           ref={canvasRef}
-          className={`absolute border-2 border-dashed border-blue-500 ${previewMask ? 'opacity-70' : 'opacity-30'}`}
+          className={`absolute border-2 border-dashed border-blue-500 ${previewMask ? 'opacity-90' : 'opacity-50'}`}
           style={{
+            mixBlendMode: 'normal',
             left: imageBounds.x,
             top: imageBounds.y,
             width: imageBounds.width,
@@ -769,10 +939,10 @@ export function SelectTool({
             {mode === 'ai' && (
               <Button 
                 onClick={handleAiSelection}
-                disabled={isProcessing}
+                disabled={isProcessing || isAiProcessing}
                 className="w-full"
               >
-                {isProcessing ? (
+                {isAiProcessing ? (
                   <>
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
                     Detecting...

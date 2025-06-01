@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Check, X } from "lucide-react";
+import { Check, X, Crop } from "lucide-react";
 import { CropArea } from "@/types/image-editor";
 
 interface CropToolProps {
@@ -21,10 +21,10 @@ export function CropTool({
   onCancel 
 }: CropToolProps) {
   const [cropArea, setCropArea] = useState<CropArea>({
-    x: canvasWidth * 0.1,
-    y: canvasHeight * 0.1,
-    width: canvasWidth * 0.8,
-    height: canvasHeight * 0.8
+    x: 0,
+    y: 0,
+    width: canvasWidth,
+    height: canvasHeight
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragHandle, setDragHandle] = useState<string | null>(null);
@@ -144,6 +144,22 @@ export function CropTool({
     onCrop(cropArea);
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCrop();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [onCancel, cropArea]);
+
   const imageBounds = getImageBounds();
 
   return (
@@ -154,6 +170,11 @@ export function CropTool({
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
+      {/* Tool Icon */}
+      <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 border">
+        <Crop className="h-5 w-5 text-primary" />
+      </div>
+      
       {/* Overlay with crop area cutout - only over the image area */}
       <div className="absolute inset-0 bg-black bg-opacity-50">
         {/* Image area overlay with crop cutout */}

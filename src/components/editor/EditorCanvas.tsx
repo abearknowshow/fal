@@ -50,11 +50,15 @@ export const EditorCanvas = forwardRef<HTMLCanvasElement, EditorCanvasProps>(
       const activeLayer = editorState.layers.find(l => l.id === editorState.activeLayerId);
       if (!activeLayer) return;
 
+      // Account for layer scaling in hit detection
+      const layerWidth = activeLayer.width * activeLayer.scaleX;
+      const layerHeight = activeLayer.height * activeLayer.scaleY;
+      
       if (
         x >= activeLayer.x && 
-        x <= activeLayer.x + activeLayer.width &&
+        x <= activeLayer.x + layerWidth &&
         y >= activeLayer.y && 
-        y <= activeLayer.y + activeLayer.height
+        y <= activeLayer.y + layerHeight
       ) {
         setIsDragging(true);
         setDragStart({ x: x - activeLayer.x, y: y - activeLayer.y });
@@ -72,12 +76,15 @@ export const EditorCanvas = forwardRef<HTMLCanvasElement, EditorCanvasProps>(
       const x = (e.clientX - rect.left - imageBounds.x) / editorState.zoom;
       const y = (e.clientY - rect.top - imageBounds.y) / editorState.zoom;
 
-      // Constrain layer movement to image bounds
+      // Constrain layer movement to image bounds (account for scaling)
       const layer = editorState.layers.find(l => l.id === dragLayerId);
       if (!layer) return;
 
-      const newX = Math.max(0, Math.min(editorState.canvasWidth - layer.width, x - dragStart.x));
-      const newY = Math.max(0, Math.min(editorState.canvasHeight - layer.height, y - dragStart.y));
+      const layerWidth = layer.width * layer.scaleX;
+      const layerHeight = layer.height * layer.scaleY;
+
+      const newX = Math.max(0, Math.min(editorState.canvasWidth - layerWidth, x - dragStart.x));
+      const newY = Math.max(0, Math.min(editorState.canvasHeight - layerHeight, y - dragStart.y));
 
       onLayerUpdate(dragLayerId, { x: newX, y: newY });
     };
@@ -157,6 +164,7 @@ export const EditorCanvas = forwardRef<HTMLCanvasElement, EditorCanvasProps>(
                     alt={layer.name}
                     className="w-full h-full object-cover"
                     draggable={false}
+                    loading="eager"
                   />
                 </div>
               );
@@ -167,8 +175,8 @@ export const EditorCanvas = forwardRef<HTMLCanvasElement, EditorCanvasProps>(
               <div
                 key={layer.id}
                 className={`absolute ${
-                  layer.id === editorState.activeLayerId ? '' : 'cursor-pointer'
-                }`}
+                  layer.id === editorState.activeLayerId ? (layer.isBackground ? '' : 'cursor-move') : 'cursor-pointer'
+                } ${!layer.isBackground ? 'hover:ring-1 hover:ring-blue-300' : ''}`}
                 style={{
                   ...baseStyle,
                   transform: `scale(${layer.scaleX}, ${layer.scaleY}) rotate(${layer.rotation}deg)`,
@@ -181,6 +189,7 @@ export const EditorCanvas = forwardRef<HTMLCanvasElement, EditorCanvasProps>(
                   alt={layer.name}
                   className="w-full h-full object-cover"
                   draggable={false}
+                  loading="eager"
                 />
               </div>
             );

@@ -120,12 +120,26 @@ class ImageCacheManager {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'));
       
-      const transaction = this.db.transaction([this.storeName], 'readonly');
-      const store = transaction.objectStore(this.storeName);
-      const request = store.getAll();
-      
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result || []);
+      try {
+        const transaction = this.db.transaction([this.storeName], 'readonly');
+        const store = transaction.objectStore(this.storeName);
+        const request = store.getAll();
+        
+        transaction.onerror = () => {
+          console.warn('Transaction failed, returning empty array');
+          resolve([]);
+        };
+        
+        request.onerror = () => {
+          console.warn('Request failed, returning empty array');
+          resolve([]);
+        };
+        
+        request.onsuccess = () => resolve(request.result || []);
+      } catch (error) {
+        console.warn('Failed to create transaction, returning empty array:', error);
+        resolve([]);
+      }
     });
   }
 

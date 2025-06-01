@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { Move } from "lucide-react";
 import { EditorLayer } from "@/types/image-editor";
 
 interface TransformToolProps {
@@ -216,6 +217,11 @@ export function TransformTool({
 
   return (
     <div className="absolute inset-0 pointer-events-none">
+      {/* Tool Icon */}
+      <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 border pointer-events-none">
+        <Move className="h-5 w-5 text-primary" />
+      </div>
+      
       {/* Layer outline */}
       <div
         className="absolute border-2 border-blue-500 border-dashed pointer-events-none"
