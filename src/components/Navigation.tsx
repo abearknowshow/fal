@@ -18,15 +18,15 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+    <nav className="bg-background border-b border-border sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo Area */}
           <Link href="/" className="flex items-center space-x-3 group">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg group-hover:bg-blue-200 dark:group-hover:bg-blue-800 transition-colors">
-              <Dumbbell className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
+              <Dumbbell className="h-6 w-6 text-primary" />
             </div>
-            <span className="text-xl font-bold text-gray-900 dark:text-white">
+            <span className="text-xl font-bold text-foreground">
               Flux 1.1 Pro
             </span>
           </Link>
@@ -39,8 +39,8 @@ export default function Navigation() {
                 href={link.href}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   link.isActive
-                    ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
-                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-primary hover:bg-muted"
                 }`}
               >
                 {link.label}
@@ -55,7 +55,7 @@ export default function Navigation() {
               variant="ghost"
               size="sm"
               onClick={toggleTheme}
-              className="p-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="p-2 text-muted-foreground hover:bg-muted"
               aria-label="Toggle theme"
             >
               {theme === "light" ? (
@@ -69,7 +69,7 @@ export default function Navigation() {
             <Button
               variant="ghost"
               size="sm"
-              className="md:hidden p-2 text-gray-700 dark:text-gray-300"
+              className="md:hidden p-2 text-muted-foreground"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               aria-label="Toggle mobile menu"
             >
@@ -84,7 +84,7 @@ export default function Navigation() {
 
         {/* Mobile Navigation Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 dark:border-gray-700 py-4">
+          <div className="md:hidden border-t border-border py-4">
             <div className="flex flex-col space-y-2">
               {navLinks.map((link) => (
                 <Link
@@ -92,8 +92,8 @@ export default function Navigation() {
                   href={link.href}
                   className={`px-3 py-2 rounded-md text-base font-medium transition-colors ${
                     link.isActive
-                      ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
-                      : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-primary hover:bg-muted"
                   }`}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >

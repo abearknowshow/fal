@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Edit } from "lucide-react";
 import { GalleryImage } from "@/types/image-generation";
 
 interface ImageModalProps {
@@ -12,6 +12,7 @@ interface ImageModalProps {
   currentIndex: number;
   onClose: () => void;
   onNavigate: (direction: 'prev' | 'next') => void;
+  onEdit?: (image: GalleryImage) => void;
 }
 
 export default function ImageModal({
@@ -19,7 +20,8 @@ export default function ImageModal({
   images,
   currentIndex,
   onClose,
-  onNavigate
+  onNavigate,
+  onEdit
 }: ImageModalProps) {
   // Download image utility
   const downloadImage = async (imageUrl: string, prompt: string) => {
@@ -108,6 +110,16 @@ export default function ImageModal({
               )}
             </div>
             <div className="flex gap-2">
+              {onEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(image)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"

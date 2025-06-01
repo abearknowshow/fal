@@ -89,7 +89,7 @@ export default function ImageGenerationForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="finetune_id">
-                Finetune Model <span className="text-xs text-gray-500"></span>
+                Finetune Model <span className="text-xs text-muted-foreground"></span>
               </Label>
               <Select
                 value={formData.finetune_id}
@@ -106,7 +106,7 @@ export default function ImageGenerationForm({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-muted-foreground">
                 {currentFinetune.description}
                 {currentFinetune.triggerWord && formData.finetune_id !== "none" && (
                   <Button
@@ -128,7 +128,7 @@ export default function ImageGenerationForm({
             <div className="space-y-2">
               <Label htmlFor="finetune_strength">
                 Finetune Strength
-                {(!formData.finetune_id.trim() || formData.finetune_id === "none") && <span className="text-xs text-gray-400"> (N/A)</span>}
+                {(!formData.finetune_id.trim() || formData.finetune_id === "none") && <span className="text-xs text-muted-foreground"> (N/A)</span>}
               </Label>
               <Input
                 id="finetune_strength"

@@ -6,8 +6,11 @@ type Theme = "light" | "dark";
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    
     // Check localStorage and system preference on mount
     const savedTheme = localStorage.getItem("theme") as Theme;
     const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -33,8 +36,10 @@ export function useTheme() {
     applyTheme(newTheme);
   };
 
+  // Return the current theme only after mounting to prevent hydration mismatch
   return {
-    theme,
+    theme: mounted ? theme : "light",
     toggleTheme,
+    mounted,
   };
 } 

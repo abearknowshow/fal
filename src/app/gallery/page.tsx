@@ -1,15 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { useGallery, type FinetuneFilter } from "@/hooks/useGallery";
 import { useImageModal } from "@/hooks/useImageModal";
 import ImageGallery from "@/components/ImageGallery";
 import ImageModal from "@/components/ImageModal";
+import ImageEditor from "@/components/ImageEditor";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { RefreshCw, Filter } from "lucide-react";
+import { GalleryImage } from "@/types/image-generation";
 
 export default function GalleryPage() {
+  const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
+  
   const {
     isLoadingGallery,
     filteredImages,
@@ -27,6 +32,22 @@ export default function GalleryPage() {
     navigateImage
   } = useImageModal(filteredImages);
 
+  const handleEditImage = (image: GalleryImage) => {
+    setEditingImage(image);
+    closeModal(); // Close the modal when opening editor
+  };
+
+  const handleCloseEditor = () => {
+    setEditingImage(null);
+  };
+
+  const handleSaveEditedImage = (editedImageUrl: string) => {
+    // Here you could save the edited image to the gallery
+    // For now, we'll just close the editor
+    console.log('Edited image saved:', editedImageUrl);
+    setEditingImage(null);
+  };
+
   const filterStats = getFilterStats();
   const filterOptions = [
     { value: 'all', label: `All Models (${filterStats.all})` },
@@ -36,11 +57,11 @@ export default function GalleryPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+    <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-4xl font-bold text-foreground mb-2">
             Image Gallery
           </h1>
           
@@ -48,7 +69,7 @@ export default function GalleryPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-4">
             {/* Filter */}
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+              <Filter className="h-4 w-4 text-muted-foreground" />
               <Label htmlFor="finetune-filter" className="text-sm font-medium">
                 Filter by Model:
               </Label>
@@ -80,7 +101,7 @@ export default function GalleryPage() {
 
           {/* Results count */}
           {!isLoadingGallery && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               Showing {filteredImages.length} images
               {finetuneFilter !== 'all' && (
                 <span> • Filtered by: {filterOptions.find(opt => opt.value === finetuneFilter)?.label}</span>
@@ -90,7 +111,7 @@ export default function GalleryPage() {
         </div>
 
         {/* Gallery Content */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                  <div className="bg-card rounded-lg shadow-sm border border-border p-6">
           <ImageGallery
             images={filteredImages}
             isLoading={isLoadingGallery}
@@ -108,7 +129,17 @@ export default function GalleryPage() {
         currentIndex={expandedImageIndex}
         onClose={closeModal}
         onNavigate={navigateImage}
+        onEdit={handleEditImage}
       />
+
+      {/* Image Editor */}
+      {editingImage && (
+        <ImageEditor
+          image={editingImage}
+          onClose={handleCloseEditor}
+          onSave={handleSaveEditedImage}
+        />
+      )}
     </div>
   );
 } 

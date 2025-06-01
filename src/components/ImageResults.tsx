@@ -18,17 +18,17 @@ export default function ImageResults({
 }: ImageResultsProps) {
   if (error) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-        <p className="text-red-600 text-sm">{error}</p>
-      </div>
+          <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+      <p className="text-destructive text-sm">{error}</p>
+    </div>
     );
   }
   
   if (isGenerating) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        <span className="ml-2 text-gray-600">Generating image...</span>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
+      <span className="ml-2 text-muted-foreground">Generating image...</span>
       </div>
     );
   }
@@ -36,7 +36,7 @@ export default function ImageResults({
   if (result) {
     return (
       <div className="space-y-4">
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-muted-foreground">
           <p><strong>Prompt:</strong> {result.prompt}</p>
           <p><strong>Seed:</strong> {result.seed}</p>
           {result.modelUsed && (
@@ -75,7 +75,7 @@ export default function ImageResults({
   }
 
   return (
-    <div className="text-center text-gray-500 py-8">
+    <div className="text-center text-muted-foreground py-8">
       <p>Generate an image to see results here</p>
     </div>
   );

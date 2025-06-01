@@ -86,9 +86,9 @@ export default function ResultsContainer({
       <CardContent className="min-h-[400px]">
         {/* Gallery Loaded Notification - now inside the card */}
         {galleryLoadedMessage && (
-          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-            <p className="text-green-700 dark:text-green-400 text-sm font-medium">{galleryLoadedMessage}</p>
-          </div>
+                  <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+          <p className="text-green-600 dark:text-green-400 text-sm font-medium">{galleryLoadedMessage}</p>
+        </div>
         )}
 
         {showGallery ? (

@@ -22,8 +22,8 @@ export default function ImageGallery({
 }: ImageGalleryProps) {
   if (isLoading) {
     return (
-      <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-gray-100 mx-auto mb-2"></div>
+      <div className="text-center text-muted-foreground py-8">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground mx-auto mb-2"></div>
         <p>Loading your gallery...</p>
       </div>
     );
@@ -31,7 +31,7 @@ export default function ImageGallery({
 
   if (images.length === 0) {
     return (
-      <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+      <div className="text-center text-muted-foreground py-8">
         <p>No images generated yet. Create some images to see them here!</p>
       </div>
     );
@@ -41,8 +41,8 @@ export default function ImageGallery({
     <div className="space-y-4">
       {/* Download Error Messages */}
       {downloadErrors.length > 0 && (
-        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-          <div className="text-yellow-800 dark:text-yellow-200">
+        <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md">
+          <div className="text-yellow-600 dark:text-yellow-400">
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <p className="font-medium text-sm">Some images failed to download locally:</p>
@@ -67,9 +67,9 @@ export default function ImageGallery({
       )}
 
       {/* Gallery Header */}
-      <div className="space-y-3 pb-3 border-b border-gray-200 dark:border-gray-700">
+      <div className="space-y-3 pb-3 border-b border-border">
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="text-sm text-muted-foreground">
             {images.length} images in gallery
           </span>
         </div>
@@ -81,7 +81,7 @@ export default function ImageGallery({
           const getStatusIcon = () => {
             switch (image.downloadStatus) {
               case 'downloading':
-                return <Download className="h-4 w-4 animate-pulse text-blue-500" />;
+                return <Download className="h-4 w-4 animate-pulse text-primary" />;
               case 'completed':
                 return <CheckCircle className="h-4 w-4 text-green-500" />;
               case 'failed':
